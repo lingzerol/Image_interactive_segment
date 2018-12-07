@@ -257,9 +257,10 @@ void IMAGE::add_bounce(const std::vector<int>&label,uchar color,bool show) {
 		}
 	}
 	if (show) {
-		cv::namedWindow("SLIC");
-		cv::imshow("SLIC", image);
+		cv::namedWindow("SAM");
+		cv::imshow("SAM", image);
 		cv::waitKey();
+		cv::destroyWindow("SAM");
 	}
 }
 
@@ -312,17 +313,32 @@ void IMAGE::get_region() {
 
 	get_region_from_label(region,label);
 	add_bounce(label,0xFF,true);
+
+	for (int i = 0; i < height; ++i) {
+		for (int j = 0; j < width; ++j) {
+			int ind = index(i, j);
+			for (int i = 0; i < CONNECTIVITY; ++i) {
+				int tx = i + direction[i][0];
+				int ty = j + direction[i][1];
+				int tind = index(tx, ty);
+				if (check(tx, ty) && label[ind] != label[tind]) {
+					region[-label[ind] - 1].add(label[tind], &region[-label[tind] - 1]);
+					region[-label[tind] - 1].add(label[ind], &region[-label[ind] - 1]);
+				}
+			}
+		}
+	}
 	mtx.unlock();
 }
 
 void IMAGE::get_label() {
 	
 	mtx.lock();
+	cv::Mat image = rgb_image.clone();
 
-	IplImage *image = cvCloneImage(&IplImage(rgb_image));
-	cvNamedWindow(name, CV_WINDOW_AUTOSIZE);
-	cvShowImage(name, image);
-	cvSetMouseCallback(name,on_mouse,(void*)image);
+	cv::namedWindow(name, CV_WINDOW_AUTOSIZE);
+	cv::imshow(name, image);
+	cv::setMouseCallback(name,on_mouse,(void*)&image);
 	int c;
 	do {
 		c = cvWaitKey(0);
@@ -336,12 +352,11 @@ void IMAGE::get_label() {
 		case 'e':
 			break;
 		case 's':
-			cvSaveImage("G:\\Matlab project\\superpixel\\bee_label.jpg",image);
+			cv::imwrite("G:/Matlab project/superpixel/bee_label.jpg", image);
 			break;
 		}
 	} while (c != 115 && c != 101);
-	cvDestroyWindow(name);
-	cvReleaseImage(&image);
+	cv::destroyWindow(name);
 	mtx.unlock();
 }
 IMAGE::~IMAGE() {
@@ -421,14 +436,14 @@ void Region::operator+=(const Region&r) {
 void on_mouse(int event, int x, int y, int flags, void* param)
 {
 	static bool s_bMouseLButtonDown = false;
-	static CvPoint s_cvPrePoint = cvPoint(0, 0);
+	static cv::Point s_cvPrePoint = cv::Point(0, 0);
 
 	switch (event)
 	{
 	case CV_EVENT_LBUTTONDOWN:
 		temp.clear();
 		s_bMouseLButtonDown = true;
-		s_cvPrePoint = cvPoint(x, y);
+		s_cvPrePoint = cv::Point(x, y);
 		break;
 
 	case  CV_EVENT_LBUTTONUP:
@@ -461,13 +476,14 @@ void on_mouse(int event, int x, int y, int flags, void* param)
 				ty += k;
 			}
 
-			CvPoint cvCurrPoint = cvPoint(x, y);
+			cv::Point cvCurrPoint = cvPoint(x, y);
+			
 			if(0==flag)
-				cvLine((IplImage*)param, s_cvPrePoint, cvCurrPoint, CV_RGB(0, 255,0), 3);
+				cv::line(*((cv::Mat*)param), s_cvPrePoint, cvCurrPoint, CV_RGB(0, 255,0), 3);
 			else if (1 == flag) 
-				cvLine((IplImage*)param, s_cvPrePoint, cvCurrPoint, CV_RGB(0, 0, 255), 3);
+				cv::line(*((cv::Mat*)param), s_cvPrePoint, cvCurrPoint, CV_RGB(0, 0, 255), 3);
 			s_cvPrePoint = cvCurrPoint;
-			cvShowImage(name, (IplImage*)param);
+			cv::imshow(name, *((cv::Mat*)param));
 		}
 		break;
 	}

@@ -106,10 +106,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>D:\Programe Files\Opencv\opencv-3.4.2\build\include;D:\Programe Files\Opencv\opencv-3.4.2\build\include\opencv2;D:\Programe Files\Opencv\opencv-3.4.2\build\include\opencv;D:\Programe Files\Matlab\R2018b\extern\include;D:\Programe Files\Matlab\extern\include\win64</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>D:\Programe Files\Opencv\opencv-3.4.2\build\x64\vc14\bin;D:\Programe Files\Opencv\opencv-3.4.2\build\x64\vc14\lib;D:\Programe Files\Matlab\R2018b\extern\lib\win64\microsoft;D:\Programe Files\Matlab\R2018b\extern\lib\win64\mingw64;D:\Programe Files\Matlab\R2018b\extern\lib\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world342d.lib;libmx.lib;libmat.lib;libeng.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -142,18 +145,23 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>D:\Programe Files\Opencv\opencv-3.4.2\build\include;D:\Programe Files\Opencv\opencv-3.4.2\build\include\opencv2;D:\Programe Files\Opencv\opencv-3.4.2\build\include\opencv;D:\Programe Files\Matlab\R2018b\extern\include;D:\Programe Files\Matlab\extern\include\win64</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>D:\Programe Files\Opencv\opencv-3.4.2\build\x64\vc14\bin;D:\Programe Files\Opencv\opencv-3.4.2\build\x64\vc14\lib;D:\Programe Files\Matlab\R2018b\extern\lib\win64\microsoft;D:\Programe Files\Matlab\R2018b\extern\lib\win64\mingw64;D:\Programe Files\Matlab\R2018b\extern\lib\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world342.lib;libmx.lib;libmat.lib;libeng.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="IMAGE.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="IMAGE.cpp" />
     <ClCompile Include="Image_interactive_segment.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
