@@ -7,14 +7,14 @@
 #include <cstdio>
 #include <map>
 #include <thread>
-
+#include <condition_variable>
 
 std::vector<std::vector<Pixel>> Object, Background;
 std::vector<Pixel> temp;
 const char *name = "SAM_label";
 int flag = -1;
 
-IMAGE::IMAGE(const cv::Mat &source){
+IMAGE::IMAGE(const cv::Mat &source):done(false){
 	rgb_image = source;
 	lab_image = rgb_to_lab();
 }
@@ -272,68 +272,64 @@ void IMAGE::MSAM() {
 }
 
 void IMAGE::get_region() {
+
 	const int width = rgb_image.cols;
 	const int height = rgb_image.rows;
 	const int num = width * height;
-
+	const int OBJECT_LABEL = -1;
+	const int BACKGROUND_LABEL = -2;
 	std::vector<int>label;
 
 
 	SAM(label, 200, 1, 100, 5, 2);
 
-	mtx.lock();
+	while (!done) {
+		std::this_thread::yield();
+	}
+	done = false;
+	std::unique_lock<std::mutex> lck(mtx);
 
-	std::vector<Region> region;
+	std::map<int,Region> region;
 	
 	int object_bounce = Object.size();
 	int background_bounce = Background.size() + object_bounce;
 
-	for (int i = 0; i < Object.size(); ++i) {
+	//for (int i = 0; i < Object.size(); ++i) {
 
-		for (int j = 0; j < Object[i].size(); ++j) {
-			int ind = index(Object[i][j].x, Object[i][j].y);
-			if (check(Object[i][j].x, Object[i][j].y))
-				label[ind] = -i-1;
-			else int k = 0;
-		}
-		if(Object[i].size()>0)
-			region.push_back(Region(Object[i]));
-	}
+	//	for (int j = 0; j < Object[i].size(); ++j) {
+	//		int ind = index(Object[i][j].x, Object[i][j].y);
+	//		if (check(Object[i][j].x, Object[i][j].y))
+	//			label[ind] = -i-1;
+	//		else int k = 0;
+	//	}
+	//	if(Object[i].size()>0)
+	//		region.push_back(Region(Object[i]));
+	//}
 
-	for (int i = 0; i < Background.size(); ++i) {	
-		for (int j = 0; j < Background[i].size(); ++j) {
-			int ind = index(Background[i][j].x, Background[i][j].y);
-			if(check(Background[i][j].x,Background[i][j].y))
-				label[ind] = -(i+object_bounce+1);
-			else int k;
-		}
-		if (Background[i].size() > 0)
-			region.push_back(Region(Background[i]));
-	}
+	//for (int i = 0; i < Background.size(); ++i) {	
+	//	for (int j = 0; j < Background[i].size(); ++j) {
+	//		int ind = index(Background[i][j].x, Background[i][j].y);
+	//		if(check(Background[i][j].x,Background[i][j].y))
+	//			label[ind] = -(i+object_bounce+1);
+	//		else int k;
+	//	}
+	//	if (Background[i].size() > 0)
+	//		region.push_back(Region(Background[i]));
+	//}
 
-	get_region_from_label(region,label);
+	region[OBJECT_LABEL]=set_label_from_mark(Object, label, -1);
+	region[BACKGROUND_LABEL]=set_label_from_mark(Background, label, -2);	
+
 	add_bounce(label,0xFF,true);
 
-	for (int i = 0; i < height; ++i) {
-		for (int j = 0; j < width; ++j) {
-			int ind = index(i, j);
-			for (int i = 0; i < CONNECTIVITY; ++i) {
-				int tx = i + direction[i][0];
-				int ty = j + direction[i][1];
-				int tind = index(tx, ty);
-				if (check(tx, ty) && label[ind] != label[tind]) {
-					region[-label[ind] - 1].add(label[tind], &region[-label[tind] - 1]);
-					region[-label[tind] - 1].add(label[ind], &region[-label[ind] - 1]);
-				}
-			}
-		}
-	}
-	mtx.unlock();
+	get_region_from_label(region, label);
+	set_region_neighbour(region, label);
+	return;
 }
 
 void IMAGE::get_label() {
 	
-	mtx.lock();
+	std::unique_lock<std::mutex> lck(mtx);
 	cv::Mat image = rgb_image.clone();
 
 	cv::namedWindow(name, CV_WINDOW_AUTOSIZE);
@@ -356,8 +352,7 @@ void IMAGE::get_label() {
 			break;
 		}
 	} while (c != 115 && c != 101);
-	cv::destroyWindow(name);
-	mtx.unlock();
+	done = true;
 }
 IMAGE::~IMAGE() {
 	for (int i = 0;i< rgb_image.rows; ++i) {
@@ -369,28 +364,39 @@ IMAGE::~IMAGE() {
 	delete lab_image;
 }
 
-void IMAGE::get_region_from_label(std::vector<Region>&r,std::vector<int>& label) {
+void IMAGE::get_region_from_label(std::map<int,Region>& region,const std::vector<int>& label) {
 	const int width = rgb_image.cols;
 	const int height = rgb_image.rows;
-	const int num = width * height;
-	int id = -(int)r.size()-1;
 	for (int i = 0; i < height; ++i) {
 		for (int j = 0; j < width; ++j) {
 			int ind = index(i, j);
-			if (check(i,j) && label[ind] >= 0) {
-				int source = label[ind];
-				label[ind] = id;
-				Region temp;
-				temp.add(Pixel(i, j));
-				bfs(i, j,source,id,label,temp);
-				r.push_back(temp);
-				--id;
+			if (label[ind] >= 0) {
+				region[label[ind]].add(Pixel(i, j));
 			}
 		}
 	}
 }
 
-void IMAGE::bfs(int x,int y,int source,int id,std::vector<int>&label,Region& temp) {
+void IMAGE::set_region_neighbour(std::map<int, Region>&region,const std::vector<int>&label) {
+	const int width = rgb_image.cols;
+	const int height = rgb_image.rows;
+	for (int i = 0; i < height; ++i) {
+		for (int j = 0; j < width; ++j) {
+			for (int k = 0; k < CONNECTIVITY; ++k) {
+				int x = i + direction[k][0];
+				int y = j + direction[k][1];
+				int ind = index(i, j);
+				int nind = index(x, y);
+				if (check(x, y) && label[ind] != label[nind]) {
+					region[label[ind]].add(label[nind], &region[label[nind]]);
+					region[label[nind]].add(label[ind], &region[label[ind]]);
+				}
+			}
+		}
+	}
+}
+
+void IMAGE::bfs(int x,int y,int source,int sign,std::vector<int>&label,Region& r) {
 	std::queue<Pixel> q;
 	q.push(Pixel(x, y));
 	while (!q.empty()) {
@@ -401,12 +407,29 @@ void IMAGE::bfs(int x,int y,int source,int id,std::vector<int>&label,Region& tem
 			int ty = t.y + direction[i][1];
 			int ind = index(tx, ty);
 			if (check(tx, ty) && label[ind] == source) {
-				label[ind] = id;
-				temp.add(Pixel(tx, ty));
+				label[ind] = sign;
+				r.add(Pixel(tx, ty));
+
+				rgb_image.ptr(tx, ty)[0] = 0;
+				rgb_image.ptr(tx, ty)[1] = 0;
+				rgb_image.ptr(tx, ty)[2] = 0;//test code
+
 				q.push(Pixel(tx, ty));
 			}
 		}
 	}
+}
+
+Region IMAGE::set_label_from_mark(const std::vector<std::vector<Pixel>>& mark, std::vector<int>&label,int sign) {
+	Region region;
+	for (int i = 0; i < mark.size(); ++i) {
+		for (int j = 0; j < mark[i].size(); ++j) {
+			int ind = index(mark[i][j].x, mark[i][j].y);
+			if (check(mark[i][j].x, mark[i][j].y) && label[ind] != sign)
+				bfs(get_x(ind), get_y(ind), label[ind], sign, label, region);
+		}
+	}
+	return region;
 }
 
 const int IMAGE::CONNECTIVITY=4;

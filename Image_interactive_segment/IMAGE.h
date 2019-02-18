@@ -9,6 +9,8 @@
 #include <queue>
 #include <map>
 #include <mutex>
+#include <condition_variable>
+#include <atomic>
 #define RGB_PIXEL false
 #define LAB_PIXEL true
 
@@ -68,7 +70,7 @@ class IMAGE {
 public:
 	const static int CONNECTIVITY;
 	IMAGE(const cv::Mat&source);
-	IMAGE(const int const*, const int const*, const int const*, int, int);
+	//IMAGE(const int const*, const int const*, const int const*, int, int);
 	int width() { return rgb_image.rows; }
 	int height() { return rgb_image.rows; }
 	double*** rgb_to_lab();
@@ -88,11 +90,18 @@ public:
 	const double* get_lab(const  Cluster_pixel& p) const{
 		return lab_image[p.x][p.y];
 	}
+	
 	~IMAGE();
 private:
 	double find_seed(int&,std::vector< Cluster_pixel>&);
 	int index(int x, int y) {
 		return x * rgb_image.cols + y;
+	}
+	int get_x(int ind) {
+		return ind / rgb_image.cols;
+	}
+	int get_y(int ind) {
+		return ind % rgb_image.cols;
 	}
 	void add_bounce(const std::vector<int>&,uchar,bool = false);
 
@@ -105,12 +114,15 @@ private:
 		return false;
 	}
 
-	void get_region_from_label(std::vector<Region>&, std::vector<int>&);
+	Region set_label_from_mark(const std::vector<std::vector<Pixel>>& mark, std::vector<int>&label, int sign);
+	void get_region_from_label(std::map<int,Region>&,const std::vector<int>&);
+	void set_region_neighbour(std::map<int,Region>&,const std::vector<int>&);
 	void bfs(int,int,int,int,std::vector<int>&,Region&);
 
 	cv::Mat rgb_image;
 	double*** lab_image;
 	std::mutex mtx;
+	std::atomic<bool> done;
 };
 void on_mouse(int, int, int, int, void*);
 #endif
