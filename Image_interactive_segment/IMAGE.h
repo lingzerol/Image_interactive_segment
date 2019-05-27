@@ -67,13 +67,12 @@ public:
 	Region();
 	Region(const Region&);
 	bool add(const Pixel&);
-	bool add(int,const Region*,double=1);
-	void operator+=(const Region&);
+	bool add(int,const Region*);
 	Region operator=(const Region&);
 	std::vector<int> combine(const Region&);
 	std::vector<int> combine(int);
 	void Init_color_distance();
-	size_t size() { return region.size(); }
+	size_t size() const{ return region.size(); }
 	void set_image(IMAGE *const image) { this->image = image; }
 	double get_real_distance(const int);
 	const std::vector<Pixel>& get_region_pixel() const{ return region; }
@@ -86,7 +85,7 @@ private:
 	IMAGE *image;
 	std::vector<Pixel> region;
 	std::map<int,const Region*> neigh;
-	std::map<int, int> distance;
+	long long x, y;
 };
 
 double kernel(double);

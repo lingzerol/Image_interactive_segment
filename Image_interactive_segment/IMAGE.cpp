@@ -246,6 +246,7 @@ void IMAGE::add_bounce(const std::vector<int>&label,uchar color,bool show) {
 	const int num = width * height;
 	cv::Mat image;
 	rgb_image.copyTo(image);
+	cv::Mat temp(rgb_image.rows, rgb_image.cols, CV_8UC3, CV_RGB(255, 255, 255));
 	for (int i = 0; i < num; ++i) {
 		int r = i / width;
 		int c = i % width;
@@ -264,9 +265,9 @@ void IMAGE::add_bounce(const std::vector<int>&label,uchar color,bool show) {
 		}
 	}
 	if (show) {
-		cv::namedWindow("SAM");
+		cv::namedWindow("SAM", CV_WINDOW_NORMAL);
 		cv::imshow("SAM", image);
-		cv::waitKey();
+		cv::waitKey(0);
 		cv::destroyWindow("SAM");
 	}
 }
@@ -293,7 +294,7 @@ void IMAGE::get_region(std::map<int,Region>& region, std::vector<int>&label) {
 	region.clear();
 	label.clear();
 	     
-	SAM(label, 200, 1,20, 25,3);
+	SAM(label, 200, 1,20, 30,3);
 	//add_bounce(label, 0xFF, true);
 	while (!done) {
 		std::this_thread::yield();
@@ -354,21 +355,21 @@ void IMAGE::combine(const std::map<int, Region>&region, std::vector<int>&label) 
 		Node(int _origin,int _dest, double _distance) :origin(_origin),dest(_dest), distance(_distance) {}
 		Node() {}
 		bool operator<(const Node&b)const {
-			return distance > b.distance;
+			return distance < b.distance;
 		}
 		bool operator==(const Node&b)const {
 			return distance == b.distance;
 		}
 	};
-	object.add(OBJECT_LABEL, &region.at(OBJECT_LABEL),0);
-	background.add(BACKGROUND_LABEL, &region.at(BACKGROUND_LABEL),0);
+	object.add(OBJECT_LABEL, &region.at(OBJECT_LABEL));
+	background.add(BACKGROUND_LABEL, &region.at(BACKGROUND_LABEL));
 
 	object.set_image(this);
 	background.set_image(this);
 
 	std::priority_queue<Node> q;
-	q.push(Node(OBJECT_LABEL, OBJECT_LABEL, 0));
-	q.push(Node(BACKGROUND_LABEL,BACKGROUND_LABEL, 0));
+	q.push(Node(OBJECT_LABEL, OBJECT_LABEL, 0x3f3f3f3f));
+	q.push(Node(BACKGROUND_LABEL,BACKGROUND_LABEL, 0x3f3f3f3f));
 	for (std::map<int, Region>::const_iterator it = region.begin(); it != region.end(); ++it) {
 		done[it->first] = false;
 	}
@@ -406,7 +407,7 @@ void IMAGE::get_label() {
 	std::unique_lock<std::mutex> lck(mtx);
 	cv::Mat image = rgb_image.clone();
 
-	cv::namedWindow(name, CV_WINDOW_AUTOSIZE);
+	cv::namedWindow(name, CV_WINDOW_NORMAL);
 	cv::imshow(name, image);
 	cv::setMouseCallback(name,on_mouse,(void*)&image);
 	int c;
@@ -427,6 +428,7 @@ void IMAGE::get_label() {
 		}
 	} while (c != 115 && c != 101);
 	done = true;
+	cv::destroyWindow(name);
 }
 IMAGE::~IMAGE() {
 	for (int i = 0;i< rgb_image.rows; ++i) {
@@ -527,15 +529,21 @@ const int IMAGE::CONNECTIVITY=4;
 
 Region::Region(IMAGE *_image,const std::vector<Pixel>&source):image(_image),region(source),kernel(::kernel) {
 	memset(color_dis, 0, sizeof(color_dis));
+	x = 0;
+	y = 0;
+	for (int i = 0; i < source.size(); ++i) {
+		x += source[i].x;
+		y += source[i].y;
+	}
 }
-Region::Region(IMAGE *_image): image(_image), kernel(::kernel) {
+Region::Region(IMAGE *_image): image(_image), kernel(::kernel), x(0), y(0) {
 	memset(color_dis, 0, sizeof(color_dis));
 }
-Region::Region(IMAGE *_image, const Pixel&p): image(_image), kernel(::kernel) {
+Region::Region(IMAGE *_image, const Pixel&p): image(_image), kernel(::kernel),x(p.x),y(p.y) {
 	memset(color_dis, 0, sizeof(color_dis));
 	region.push_back(p);
 }
-Region::Region() :image(NULL),kernel(::kernel) {
+Region::Region() :image(NULL),kernel(::kernel),x(0),y(0) {
 	memset(color_dis, 0, sizeof(color_dis));
 }
 Region::Region(const Region&r):kernel(r.kernel) {
@@ -543,31 +551,27 @@ Region::Region(const Region&r):kernel(r.kernel) {
 	image = r.image;
 	region = r.region;
 	neigh = r.neigh;
-	distance = r.distance;
+	x = r.x;
+	y = r.y;
 }
 bool Region::add(const Pixel&p) {
 	region.push_back(p);
+	x += p.x;
+	y += p.y;
 	return true;
 }
-bool Region::add(int ind, const Region*r, double _distance) {
+bool Region::add(int ind, const Region*r) {
 	neigh[ind] = r;
-	distance[ind] = _distance;
 	return true;
 }
-void Region::operator+=(const Region&r) {
-	region.insert(region.end(), r.region.begin(), r.region.end());
-	for (std::map<int, const Region*>::const_iterator it = r.neigh.begin(); it != r.neigh.end(); ++it) {
-		neigh[it->first] = it->second;
-	}
-}
-
 Region Region::operator=(const Region&r) {
 	kernel = r.kernel;
 	memcpy(color_dis, r.color_dis, sizeof(color_dis));
 	image = r.image;
 	region = r.region;
 	neigh = r.neigh;
-	distance = r.distance;
+	x = r.x;
+	y = r.y;
 	return *this;
 }
 std::vector<int> Region::combine(int id) {
@@ -586,11 +590,8 @@ std::vector<int> Region::combine(const Region& r) {
 			nid.push_back(i.first);
 		}
 	}
-	for (auto &i : r.distance) {
-		if (distance.find(i.first) == distance.end()) {
-			distance[i.first] = kernel(i.second);
-		}
-	}
+	x += r.x;
+	y += r.y;
 	Init_color_distance();
 	return nid;
 }
@@ -637,24 +638,27 @@ int Region::find_color_id(const uchar *c,const int dimension,const int *level) {
 const int Region::dimension = 16;
 
 double Region::get_real_distance(const int id){ 
-	const static double M = 0.875;
-	const static double N = 0.125;
+	const static double M = 10;
+	const static double N = 2;
 	if (neigh.find(id) == neigh.end()) {
 		std::cerr << "cannot find the Region with id = " << id << std::endl;
 		exit(1);
 	}
 	const Region *r = neigh[id];
 	int num = Region::dimension*Region::dimension*Region::dimension;
-	double ans=0.0000001;
+	double ans=0;
+	double dx = x/ region.size() - r->x / r->size();
+	double dy = y / region.size() - r->y / r->size();;
+	double distance = sqrt(dx*dx + dy * dy);
 	for (int i = 0; i < num; ++i) {
 		ans += sqrt(color_dis[i] * r->color_dis[i]);
 	}
-	ans = M * 100/ans + N * distance[id];
+	ans = M * ans + N *(log(image->width()*image->height())-log(distance));
 	return ans;
 }
 
 double kernel(double d) {
-	return d + log(8+d);
+	return d + log(8+d*d);
 }
 
 void on_mouse(int event, int x, int y, int flags, void* param)
